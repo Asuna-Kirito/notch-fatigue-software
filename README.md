@@ -3,23 +3,28 @@
 海洋立管、管道环焊缝的疲劳寿命分析软件。读入 ANSYS 有限元的焊趾单位载荷应力和 OrcaFlex 动力分析的焊缝截面内力时程，
 按 IIW 有效缺口应力法（焊趾虚拟圆角 r = 1 mm）逐节点计算疲劳寿命，给出危险位置、评定方法、逐步计算书和工程报告。
 
-本仓库提供 **Windows 64 位发布版**（已编译的程序，不含源代码）和使用文档。
+本仓库提供 **Windows x64** 和 **Linux x64** 发布版（已编译的程序，不含源代码）和使用文档。
 
 | 版本 | 平台 | 下载 |
 |---|---|---|
-| 1.0.0 | Windows 10 / 11，64 位（Intel、AMD） | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.0.0_win-x64.zip`，或本仓库的 [`Windows-x64`](Windows-x64) 文件夹 |
-| — | Linux x64 / Linux ARM64 / Windows ARM64 | 尚未提供，见 [平台支持](docs/平台支持.md) |
+| 1.0.1 | Windows 10 / 11，64 位（Intel、AMD） | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.0.1_win-x64.zip`，或本仓库的 [`Windows-x64`](Windows-x64) 文件夹 |
+| 1.0.1 | Linux 64 位（x86-64，Ubuntu 22.04、Debian 12 及以上） | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.0.1_linux-x64.tar.gz` |
+
+不提供 ARM 版（Windows ARM、Linux ARM64），见 [平台支持](docs/平台支持.md)。
 
 ---
 
 ## 下载与安装
 
-**方法一（推荐）：Release 压缩包。** 打开右侧 **Releases**，下载 `NotchFatigue_v1.0.0_win-x64.zip`（约 220 MB），解压到任意文件夹。
+**方法一（推荐）：Release 压缩包。** 打开右侧 **Releases**，Windows 下载 `NotchFatigue_v1.0.1_win-x64.zip`，Linux 下载 `NotchFatigue_v1.0.1_linux-x64.tar.gz`（各约 180～250 MB），解压到任意文件夹。
 
-**方法二：下载整个仓库。** 点页面上方绿色的 **Code → Download ZIP**，解压后进入 `Windows-x64\焊缝缺口应力疲劳分析`。
-仓库中的大文件 `llvmlite.dll`（120 MB）用 Git LFS 存放；如果解压后程序打不开、提示 `llvmlite.dll` 缺少或损坏，请改用方法一。
+**方法二（只限 Windows）：下载整个仓库。** 点页面上方绿色的 **Code → Download ZIP**，解压后进入 `Windows-x64\焊缝缺口应力疲劳分析`。
+仓库中的大文件 `llvmlite.dll`（120 MB）用 Git LFS 存放，Download ZIP 已包含；如果解压后程序打不开、提示 `llvmlite.dll` 缺少或损坏，请改用方法一。
 
-解压后的文件夹：
+**Linux：** 解压后在终端运行 `./焊缝缺口应力疲劳分析/焊缝缺口应力疲劳分析`。缺少 Qt 运行库时先安装（Ubuntu / Debian）：
+`sudo apt install libxcb-cursor0 libegl1 libgl1 libxkbcommon-x11-0`。需要图形桌面。
+
+解压后的文件夹（Windows；Linux 版没有 `.exe` 后缀，卸载脚本为 `uninstall.sh`）：
 
 ```
 焊缝缺口应力疲劳分析\
@@ -74,7 +79,8 @@
 
 ## 运行环境
 
-- Windows 10（1809 及以上）或 Windows 11，64 位；Intel 或 AMD 处理器，2 核以上
+- Windows 10（1809 及以上）或 Windows 11，64 位；或 Linux 64 位（glibc 2.35 及以上，如 Ubuntu 22.04、Debian 12 及以上，需要图形桌面）
+- Intel 或 AMD x86-64 处理器，2 核以上（不提供 ARM 版）
 - 内存：软件本身约 150～300 MB，整机 4 GB 以上
 - 硬盘：1 GB 以上可用空间
 - 显示：1366×768 以上；三维页需要 OpenGL 2.1
@@ -83,7 +89,7 @@
 
 | 位置 | 内容 |
 |---|---|
-| `Windows-x64/焊缝缺口应力疲劳分析/` | 已编译的程序（与 Release 压缩包相同），可直接运行 |
+| `Windows-x64/焊缝缺口应力疲劳分析/` | Windows 版已编译的程序（与 Release 压缩包相同），可直接运行；Linux 版只在 Releases 中提供 |
 | `示例数据/` | 合成的焊缝截面内力时程，用于试用 |
 | `docs/` | 使用文档 |
 
