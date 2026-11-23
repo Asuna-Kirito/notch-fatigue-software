@@ -1,0 +1,6 @@
+Windows-x64/**/llvmlite.dll filter=lfs diff=lfs merge=lfs -text
+*.bat -text
+*.cmd -text
+*.exe binary
+*.dll binary
+*.pyd binary
