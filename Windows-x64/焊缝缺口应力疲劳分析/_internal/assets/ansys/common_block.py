@@ -1,23 +1,3 @@
-# -*- coding: utf-8 -*-
-# Pure ASCII file on purpose: runs in Mechanical IronPython 2.7 and CPython.
-"""
-06  SECOND SUBMODEL - toe peak summary for mesh convergence and cut-distance studies
-
-Run it in every variant you want to compare (other mesh, other element type, +/-20 mm vs +/-40 mm cut).
-It evaluates on FAT, for the steps in STEPS, the maximum principal stress S1 and the stress normal
-to the weld SZ (local), and appends one line per step to Desktop/FAT_ANSYS/peak_log.csv with RUN_LABEL.
-Then it prints the difference to every earlier run in the log:
-  mesh study: change < 3 % -> mesh converged;  cut study: change < 2 % -> cut far enough.
-Light: two results on the FAT faces only, no files besides the log.
-"""
-RUN_LABEL = "base"                        # change for every variant, e.g. "arc6_layer0.05", "cut40"
-SELECTION_NAME = "FAT"
-COORDINATE_SYSTEM_NAME = "local"   # pipe system: z along the axis; first submodel without it uses the saved full-model local
-WELD_Z_MM = None                   # None = automatic (middle of the model); or z of the weld in mm
-ANALYSIS_INDEX = 0
-STEPS = [1, 2, 3, 4, 5, 6]                # steps to compare (k -> time k s): axial, shear, torsion, bending
-KEEP_CHECK_RESULTS = False
-
 # ------------------------------------------------------------------ common block (same in scripts 01-06)
 import math
 from System import Environment, DateTime, Double
@@ -778,7 +758,7 @@ def compare_planes(child_rows, parent_path, parent_label, limit_ok=0.02, limit_w
                     .format(o, max(r)))
                 out("          The cut face on this side receives no displacement: it is missing from the Geometry of the")
                 out("          Imported Cut Boundary Constraint, or its nodes were not mapped from the parent. Select BOTH")
-                out("          cut faces, re-import, solve again and rerun this script before exporting (04-07).")
+                out("          cut faces, re-import, solve again and rerun this script before exporting (04-06).")
             elif r and min(r) < 0.5:
                 out("[CHECK]   plane {0:+g} mm: some steps carry less than half of the parent stress ({1:.0%}).".format(o, min(r)))
                 out("          Check the Imported Cut Boundary Constraint on this cut face and the source time mapping.")
@@ -820,78 +800,39 @@ def submodel_tree_check(analysis):
     return cut
 
 
+def selection_names(names):
+    """'FAT' or ['FAT1', 'FAT2'] -> list of names."""
+    if isinstance(names, (list, tuple)):
+        return [str(x) for x in names]
+    return [str(names)]
+
+
+def get_selections(names):
+    """Named selections (geometry faces) for one name or a list of names; each must exist exactly once."""
+    out_list = []
+    for nm in selection_names(names):
+        matches = list(ExtAPI.DataModel.GetObjectsByName(nm))
+        if len(matches) != 1:
+            raise Exception("Create exactly one face named selection " + nm)
+        if "GeometryEntities" not in str(matches[0].Location.SelectionType):
+            raise Exception("Named selection " + nm + " must contain geometry faces")
+        out_list.append(matches[0])
+    return out_list
+
+
 def fat_z_range(analysis, frame, name="FAT", absolute=False):
-    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None."""
+    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None. name may be a list."""
     try:
-        sel = list(ExtAPI.DataModel.GetObjectsByName(name))[0]
+        ids = []
+        for nm in selection_names(name):
+            ids.extend(list(list(ExtAPI.DataModel.GetObjectsByName(nm))[0].Location.Ids))
         mesh = analysis.MeshData
         f = factor_to_mm(str(mesh.Unit))
         zs = []
-        for fid in list(sel.Location.Ids):
+        for fid in ids:
             for n in mesh.MeshRegionById(int(fid)).NodeIds:
                 nd = mesh.NodeById(int(n))
                 zs.append(to_local([float(nd.X) * f, float(nd.Y) * f, float(nd.Z) * f], frame)[2] - (0.0 if absolute else WELD_Z_MM))
         return min(zs), max(zs)
     except Exception:
         return None
-
-
-def main():
-    model = ExtAPI.DataModel.Project.Model
-    analysis = model.Analyses[ANALYSIS_INDEX]
-    sel = list(ExtAPI.DataModel.GetObjectsByName(SELECTION_NAME))
-    if len(sel) != 1:
-        raise Exception("Create exactly one face named selection " + SELECTION_NAME)
-    cs = find_coordinate_system(model, COORDINATE_SYSTEM_NAME)
-    cleanup(analysis)
-    folder = desktop_folder(OUTPUT_FOLDER)
-    mesh = analysis.MeshData
-    out("06 toe peak summary   run '{0}'   analysis {1}   nodes {2}   elements {3}".format(
-        RUN_LABEL, analysis.Name, get(mesh, "NodeCount", "?"), get(mesh, "ElementCount", "?")))
-    sol = analysis.Solution
-    rs = [user_result(sol, "S1", sel[0].Location, None, "PK_S1"), user_result(sol, "SZ", sel[0].Location, cs, "PK_SZ")]
-    new = []
-    try:
-        for s in STEPS:
-            s1 = evaluate(rs[0], float(s))
-            sz = evaluate(rs[1], float(s))
-            n1 = max(s1, key=lambda n: s1[n])
-            nz = max(sz, key=lambda n: abs(sz[n]))
-            new.append((s, s1[n1], n1, sz[nz], nz))
-            out("step {0:2d}: max S1 = {1:.5g} MPa (node {2}), max |SZ| = {3:.5g} MPa (node {4})".format(s, s1[n1], n1, sz[nz], nz))
-    finally:
-        if not KEEP_CHECK_RESULTS:
-            for r in rs:
-                try:
-                    r.Delete()
-                except Exception:
-                    pass
-    path = Path.Combine(folder, "peak_log.csv")
-    old = read_lines(path) if File.Exists(path) else ["label,time,step,max_S1_MPa,node_S1,max_abs_SZ_MPa,node_SZ,nodes,elements"]
-    prev = {}
-    for line in old[1:]:
-        p = line.split(",")
-        if p[0] != RUN_LABEL:
-            prev.setdefault(p[0], {})[int(p[2])] = (float(p[3]), float(p[5]))
-    stamp = now_tag()
-    for s, a, na, b, nb in new:
-        old.append("{0},{1},{2},{3:.6g},{4},{5:.6g},{6},{7},{8}".format(
-            RUN_LABEL, stamp, s, a, na, b, nb, get(mesh, "NodeCount", ""), get(mesh, "ElementCount", "")))
-    write_text(path, "\n".join(old) + "\n")
-    out("")
-    out("== Change of the peak relative to earlier runs ==")
-    for label in sorted(prev):
-        d = []
-        for s, a, na, b, nb in new:
-            if s in prev[label]:
-                pa, pb = prev[label][s]
-                d.append(max(abs(a - pa) / max(abs(pa), 1e-30), abs(abs(b) - abs(pb)) / max(abs(pb), 1e-30)))
-        if d:
-            out("  vs '{0}': largest change {1:.2%}".format(label, max(d)))
-    out("mesh study: < 3 % converged; cut-distance study: < 2 % cut far enough")
-    out("log: " + path)
-    save_log(folder, "06_peak_" + RUN_LABEL)
-
-
-with quiet():
-    main()

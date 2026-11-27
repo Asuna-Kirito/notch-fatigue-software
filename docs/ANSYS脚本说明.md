@@ -1,6 +1,6 @@
 # ANSYS 脚本说明
 
-1.0.1 随软件提供的 ANSYS Mechanical 脚本在程序文件夹的 `_internal\数据\ANSYS脚本` 中，共 01～07 号，全部在 Mechanical 中运行。
+1.1.0 随软件提供的 ANSYS Mechanical 脚本在程序文件夹的 `scripts` 中，共 01～07 号，全部在 Mechanical 中运行。
 
 ## 运行方法
 

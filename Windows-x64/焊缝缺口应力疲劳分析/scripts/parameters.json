@@ -1,0 +1,32 @@
+{
+ "outputs": [],
+ "od_mm": 294.0,
+ "wt_mm": 20.0,
+ "wt2_mm": 0.0,
+ "hilo_mm": 0.0,
+ "cap_h_mm": 3.0,
+ "cap_w_mm": 26.0,
+ "root_h_mm": 1.0,
+ "root_w_mm": 6.0,
+ "groove_deg": 50.0,
+ "fillet_r_mm": 1.0,
+ "assess_root": false,
+ "half_length_mm": 40.0,
+ "pressure_step": false,
+ "cs_name": "local",
+ "fat_name": "FAT",
+ "toe_name": "FAT1",
+ "root_name": "FAT2",
+ "output_folder": "FAT_ANSYS",
+ "analysis_index": 0,
+ "run_label": "base",
+ "full_length_mm": 26000.0,
+ "constraint_z_mm": 13000.0,
+ "weld_z_mm": 0.0,
+ "profile_cuts_deg": [
+  0.0,
+  90.0,
+  180.0,
+  270.0
+ ]
+}

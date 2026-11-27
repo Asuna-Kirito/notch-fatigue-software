@@ -11,7 +11,7 @@ Writes into Desktop/FAT_ANSYS (same folder as script 04):
   export_info_mesh.txt element types, size statistics (median / 95 % / max)
 The software reads these files together with the STEP files of script 04.
 """
-SELECTION_NAME = "FAT"
+SELECTION_NAME = "FAT"                    # or ["FAT1", "FAT2"]
 COORDINATE_SYSTEM_NAME = "local"   # pipe system: z along the axis; first submodel without it uses the saved full-model local
 WELD_Z_MM = None                   # None = automatic (middle of the model); or z of the weld in mm
 ANALYSIS_INDEX = 0
@@ -777,7 +777,7 @@ def compare_planes(child_rows, parent_path, parent_label, limit_ok=0.02, limit_w
                     .format(o, max(r)))
                 out("          The cut face on this side receives no displacement: it is missing from the Geometry of the")
                 out("          Imported Cut Boundary Constraint, or its nodes were not mapped from the parent. Select BOTH")
-                out("          cut faces, re-import, solve again and rerun this script before exporting (04-07).")
+                out("          cut faces, re-import, solve again and rerun this script before exporting (04-06).")
             elif r and min(r) < 0.5:
                 out("[CHECK]   plane {0:+g} mm: some steps carry less than half of the parent stress ({1:.0%}).".format(o, min(r)))
                 out("          Check the Imported Cut Boundary Constraint on this cut face and the source time mapping.")
@@ -819,14 +819,36 @@ def submodel_tree_check(analysis):
     return cut
 
 
+def selection_names(names):
+    """'FAT' or ['FAT1', 'FAT2'] -> list of names."""
+    if isinstance(names, (list, tuple)):
+        return [str(x) for x in names]
+    return [str(names)]
+
+
+def get_selections(names):
+    """Named selections (geometry faces) for one name or a list of names; each must exist exactly once."""
+    out_list = []
+    for nm in selection_names(names):
+        matches = list(ExtAPI.DataModel.GetObjectsByName(nm))
+        if len(matches) != 1:
+            raise Exception("Create exactly one face named selection " + nm)
+        if "GeometryEntities" not in str(matches[0].Location.SelectionType):
+            raise Exception("Named selection " + nm + " must contain geometry faces")
+        out_list.append(matches[0])
+    return out_list
+
+
 def fat_z_range(analysis, frame, name="FAT", absolute=False):
-    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None."""
+    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None. name may be a list."""
     try:
-        sel = list(ExtAPI.DataModel.GetObjectsByName(name))[0]
+        ids = []
+        for nm in selection_names(name):
+            ids.extend(list(list(ExtAPI.DataModel.GetObjectsByName(nm))[0].Location.Ids))
         mesh = analysis.MeshData
         f = factor_to_mm(str(mesh.Unit))
         zs = []
-        for fid in list(sel.Location.Ids):
+        for fid in ids:
             for n in mesh.MeshRegionById(int(fid)).NodeIds:
                 nd = mesh.NodeById(int(n))
                 zs.append(to_local([float(nd.X) * f, float(nd.Y) * f, float(nd.Z) * f], frame)[2] - (0.0 if absolute else WELD_Z_MM))
@@ -851,7 +873,7 @@ def stats(values):
     return {"min": v[0], "median": v[len(v) // 2], "p95": v[int(0.95 * (len(v) - 1))], "max": v[-1]}
 
 
-def export_geometry(analysis, selection, frame, out_dir, info):
+def export_geometry(analysis, selections, frame, out_dir, info):
     mesh = analysis.MeshData
     unit = str(mesh.Unit)
     f = factor_to_mm(unit)
@@ -869,7 +891,10 @@ def export_geometry(analysis, selection, frame, out_dir, info):
 
     node_face, facets, quality = {}, [], []
     elem_types = {}
-    for fid in list(selection.Location.Ids):
+    face_ids = []
+    for selection in selections:
+        face_ids.extend(list(selection.Location.Ids))
+    for fid in face_ids:
         region = mesh.MeshRegionById(int(fid))
         nset = set(int(n) for n in region.NodeIds)
         for n in nset:
@@ -960,16 +985,14 @@ def export_geometry(analysis, selection, frame, out_dir, info):
 def main():
     model = ExtAPI.DataModel.Project.Model
     analysis = model.Analyses[ANALYSIS_INDEX]
-    matches = list(ExtAPI.DataModel.GetObjectsByName(SELECTION_NAME))
-    if len(matches) != 1:
-        raise Exception("Create exactly one face named selection " + SELECTION_NAME)
+    matches = get_selections(SELECTION_NAME)
     cs = find_coordinate_system(model, COORDINATE_SYSTEM_NAME)
     frame = coordinate_frame(cs)
     check_against_saved(frame)
     resolve_weld_z(mesh_nodes_local(analysis, frame), fat_z_range(analysis, frame, SELECTION_NAME, absolute=True))
     folder = desktop_folder(OUTPUT_FOLDER)
     info = {}
-    export_geometry(analysis, matches[0], frame, folder, info)
+    export_geometry(analysis, matches, frame, folder, info)
     lines = ["exported = " + now_tag(), "coordinate_system = " + COORDINATE_SYSTEM_NAME]
     for k in sorted(info):
         v = info[k]

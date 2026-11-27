@@ -7,8 +7,8 @@
 
 | 版本 | 平台 | 下载 |
 |---|---|---|
-| 1.0.1 | Windows 10、Windows 11，64 位 | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.0.1_win-x64.zip`，也可以用本仓库的 [`Windows-x64`](Windows-x64) 文件夹 |
-| 1.0.1 | Linux x86-64，Ubuntu 22.04、Debian 12 及更新版本 | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.0.1_linux-x64.tar.gz` |
+| 1.1.0 | Windows 10、Windows 11，64 位 | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.1.0_win-x64.zip`，也可以用本仓库的 [`Windows-x64`](Windows-x64) 文件夹 |
+| 1.1.0 | Linux x86-64，Ubuntu 22.04、Debian 12 及更新版本 | [Releases](../../releases/latest) 中的 `NotchFatigue_v1.1.0_linux-x64.tar.gz` |
 
 ARM 处理器的电脑不提供单独的版本，详见 [平台支持](docs/平台支持.md)。
 
@@ -16,7 +16,7 @@ ARM 处理器的电脑不提供单独的版本，详见 [平台支持](docs/平�
 
 ## 下载与安装
 
-推荐从 Releases 下载压缩包。Windows 下载 `NotchFatigue_v1.0.1_win-x64.zip`，Linux 下载 `NotchFatigue_v1.0.1_linux-x64.tar.gz`，解压到任意文件夹即可使用，不需要安装 Python 或其他运行库，路径中可以有中文。
+推荐从 Releases 下载压缩包。Windows 下载 `NotchFatigue_v1.1.0_win-x64.zip`，Linux 下载 `NotchFatigue_v1.1.0_linux-x64.tar.gz`，解压到任意文件夹即可使用，不需要安装 Python 或其他运行库，路径中可以有中文。
 
 Windows 也可以点页面上方的 Code → Download ZIP 下载整个仓库，解压后进入 `Windows-x64\焊缝缺口应力疲劳分析`。仓库中最大的文件 `llvmlite.dll` 用 Git LFS 存放，如果解压后提示这个文件缺少或损坏，请改用 Releases 压缩包。
 
@@ -26,17 +26,18 @@ Linux 解压后在终端运行 `./焊缝缺口应力疲劳分析/焊缝缺口应
 sudo apt install libxcb-cursor0 libegl1 libgl1 libxkbcommon-x11-0
 ```
 
-1.0.1 解压后的文件夹：
+1.1.0 解压后的文件夹：
 
 ```
 焊缝缺口应力疲劳分析\
 ├─ 焊缝缺口应力疲劳分析.exe     双击运行，Linux 版没有 .exe 后缀
-├─ 卸载.cmd                     删除整个程序文件夹，Linux 版为 uninstall.sh
-└─ _internal\                   程序文件
-   └─ 数据\
-      ├─ 单位载荷库\            有限元模型，附带一个外径 294 mm、壁厚 20 mm 的环焊缝示例
-      ├─ 计算结果\              计算结果和导出的 Excel、Word
-      └─ ANSYS脚本\             在 ANSYS Mechanical 中运行的导出脚本
+├─ scripts\                     ANSYS Mechanical 中运行的检查与导出脚本
+├─ data\models\                 单位载荷模型，附带一个外径 294 mm、壁厚 20 mm 的环焊缝示例
+├─ data\loads\                  导入的载荷文件
+├─ solution\                    计算任务（含结果）
+├─ report\                      导出的 Excel 和 Word
+├─ figure\                      保存的图片
+└─ _internal\                   程序文件、卸载.cmd，以及曲线库、材料库、界面设置
 ```
 
 第一次计算时计算内核要编译，会多用几十秒，以后有缓存。软件不写注册表，删除文件夹即卸载干净。
@@ -46,7 +47,7 @@ sudo apt install libxcb-cursor0 libegl1 libgl1 libxkbcommon-x11-0
 用软件附带的示例模型和本仓库 [`示例数据`](示例数据) 中的 `示例载荷_焊缝截面.csv`。这个载荷是人工合成的，不是工程数据。
 
 1. 模型：启动后自动打开示例模型，页面上有节点数、数据检查和焊缝几何。
-2. 载荷：在“焊缝截面”处选 `示例载荷_焊缝截面.csv`，软件自动识别列名和单位，点“加入计算队列”。
+2. 载荷：把 `示例载荷_焊缝截面.csv` 拖进窗口或点“导入表格”，软件自动识别列名、单位和截面，确认后加入计算队列。
 3. 设置：选 S-N 曲线和安全系数，用默认设置即可。
 4. 计算：点“开始计算”，一万个节点的工况一般一两分钟。
 5. 结果：查看最短寿命、危险节点和寿命沿圆周的分布；双击危险节点进入节点页看应力时程和雨流谱；导出 Excel 和危险节点报告。

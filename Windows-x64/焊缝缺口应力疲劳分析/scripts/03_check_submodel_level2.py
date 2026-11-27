@@ -1,24 +1,29 @@
 # -*- coding: utf-8 -*-
 # Pure ASCII file on purpose: runs in Mechanical IronPython 2.7 and CPython.
 """
-04  SECOND SUBMODEL - export the six stress components on the FAT faces (run after solving)
+03  SECOND SUBMODEL (the one with the 1 mm fillets) - check (read-only, run after solving it)
 
-Writes into Desktop/FAT_ANSYS (folder is created; files of an earlier run with the same names are overwritten):
-  STEP_01_time_1.csv ... STEP_12_time_12.csv   body_id,node_id,SX..SXZ in MPa, coordinate system 'local'
-  export_info.txt                              settings, constraint position, per-step checks
-Script 05 writes the coordinates and the mesh into the same folder. Give the whole folder to the
-software (New model). Size: about 60 bytes per node and step (20 000 nodes -> 1.2 MB per step).
-Only result objects are added (and deleted at the end); loads, supports and mesh are not changed.
+What it does
+  1. analysis settings: 12 steps, Large Deflection Off, Inertia Relief OFF, Direct solver
+  2. boundary conditions: only the Imported Cut Boundary Constraint
+  3. cut distance: axial extent of the model and of the FAT faces -> free length between the
+     outer edge of the toe fillet and each cut face (recommended >= 20 mm = one wall thickness)
+  4. section planes between the toe and the cut faces (every 2 mm, weld region skipped automatically),
+     compared with the first submodel (L1_sub500_planes.csv written by script 02).
+     The plane nearest to each cut face is the decisive one: <= 2 % means the cut is far enough.
+Output: Desktop/FAT_ANSYS/03_submodel_fillet_<time>.txt and L2_fillet_planes.csv. Run time: about 2-5 min.
 """
-SELECTION_NAME = "FAT"                    # named selection of the fillet faces (geometry faces)
-COORDINATE_SYSTEM_NAME = "local"   # pipe system: z along the axis; first submodel without it uses the saved full-model local
-CONSTRAINT_Z_MM = 13000.0                 # supports of the 26 m model, full-model convention (z = 0 at end A)
-WELD_Z_MM = None                   # None = automatic (middle of the model); or z of the weld in mm
 ANALYSIS_INDEX = 0
+COORDINATE_SYSTEM_NAME = "local"   # pipe system: z along the axis; first submodel without it uses the saved full-model local
+WELD_Z_MM = None                   # None = automatic (middle of the model); or z of the weld in mm
+R_OUT_MM = 147.0
+R_IN_MM = 127.0
+EXPECTED_STEPS = 12
 TIMES_S = [float(i) for i in range(1, 13)]
-DIGITS = 9                                # significant digits written
+FAT_SELECTION = "FAT"
+PLANE_OFFSETS_MM = sorted([s * x for x in range(14, 81, 2) for s in (-1, 1)])
+RECOMMENDED_FREE_LENGTH_MM = 20.0
 KEEP_CHECK_RESULTS = False
-COMPONENTS = ["SX", "SY", "SZ", "SXY", "SYZ", "SXZ"]
 
 # ------------------------------------------------------------------ common block (same in scripts 01-06)
 import math
@@ -780,7 +785,7 @@ def compare_planes(child_rows, parent_path, parent_label, limit_ok=0.02, limit_w
                     .format(o, max(r)))
                 out("          The cut face on this side receives no displacement: it is missing from the Geometry of the")
                 out("          Imported Cut Boundary Constraint, or its nodes were not mapped from the parent. Select BOTH")
-                out("          cut faces, re-import, solve again and rerun this script before exporting (04-07).")
+                out("          cut faces, re-import, solve again and rerun this script before exporting (04-06).")
             elif r and min(r) < 0.5:
                 out("[CHECK]   plane {0:+g} mm: some steps carry less than half of the parent stress ({1:.0%}).".format(o, min(r)))
                 out("          Check the Imported Cut Boundary Constraint on this cut face and the source time mapping.")
@@ -822,14 +827,36 @@ def submodel_tree_check(analysis):
     return cut
 
 
+def selection_names(names):
+    """'FAT' or ['FAT1', 'FAT2'] -> list of names."""
+    if isinstance(names, (list, tuple)):
+        return [str(x) for x in names]
+    return [str(names)]
+
+
+def get_selections(names):
+    """Named selections (geometry faces) for one name or a list of names; each must exist exactly once."""
+    out_list = []
+    for nm in selection_names(names):
+        matches = list(ExtAPI.DataModel.GetObjectsByName(nm))
+        if len(matches) != 1:
+            raise Exception("Create exactly one face named selection " + nm)
+        if "GeometryEntities" not in str(matches[0].Location.SelectionType):
+            raise Exception("Named selection " + nm + " must contain geometry faces")
+        out_list.append(matches[0])
+    return out_list
+
+
 def fat_z_range(analysis, frame, name="FAT", absolute=False):
-    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None."""
+    """Axial range of the FAT fillet faces (offset from the weld, or absolute z), or None. name may be a list."""
     try:
-        sel = list(ExtAPI.DataModel.GetObjectsByName(name))[0]
+        ids = []
+        for nm in selection_names(name):
+            ids.extend(list(list(ExtAPI.DataModel.GetObjectsByName(nm))[0].Location.Ids))
         mesh = analysis.MeshData
         f = factor_to_mm(str(mesh.Unit))
         zs = []
-        for fid in list(sel.Location.Ids):
+        for fid in ids:
             for n in mesh.MeshRegionById(int(fid)).NodeIds:
                 nd = mesh.NodeById(int(n))
                 zs.append(to_local([float(nd.X) * f, float(nd.Y) * f, float(nd.Z) * f], frame)[2] - (0.0 if absolute else WELD_Z_MM))
@@ -841,81 +868,35 @@ def fat_z_range(analysis, frame, name="FAT", absolute=False):
 def main():
     model = ExtAPI.DataModel.Project.Model
     analysis = model.Analyses[ANALYSIS_INDEX]
-    matches = list(ExtAPI.DataModel.GetObjectsByName(SELECTION_NAME))
-    if len(matches) != 1:
-        raise Exception("Create exactly one face named selection " + SELECTION_NAME)
-    selection = matches[0]
-    if "GeometryEntities" not in str(selection.Location.SelectionType):
-        raise Exception("Named selection must contain geometry faces")
-    cs = find_coordinate_system(model, COORDINATE_SYSTEM_NAME)
-    if not File.Exists("{0}".format(analysis.ResultFileName)):
-        raise Exception("Solve the model first (result file not found)")
     cleanup(analysis)
     folder = desktop_folder(OUTPUT_FOLDER)
-    info = ["format = notchfat-ansys-export-3", "selection = " + SELECTION_NAME,
-            "result_file = {0}".format(analysis.ResultFileName), "coordinate_system = " + COORDINATE_SYSTEM_NAME,
-            "stress_unit = MPa", "constraint_z_mm = {0:g}".format(CONSTRAINT_Z_MM), "weld_z_mm = {0:g}".format(REF_WELD_Z_MM),
-            "averaging = Mechanical Averaged; AverageAcrossBodies=False; body/node key retained",
-            "exported = " + now_tag()]
-    sol = analysis.Solution
-    results = [user_result(sol, c, selection.Location, cs, "EXP_" + c) for c in COMPONENTS]
-    scope = None
-    try:
-        for k, t in enumerate(TIMES_S):
-            rows = {}
-            for ci, r in enumerate(results):
-                r.DisplayTime = Quantity(float(t), "s")
-                r.EvaluateAllResults()
-                if not r.IsSolved:
-                    raise Exception("Result could not be evaluated: " + COMPONENTS[ci])
-                if abs(float(r.Time.Value) - t) > 1e-6 * max(1.0, t):
-                    raise Exception("Requested/actual time mismatch at {0} s; step end times must be 1..12 s".format(t))
-                table = r.PlotData
-                table.ShowHiddenColumns = True
-                nodes = read_native_column(table["Node"], "Node")
-                raw = table["Values"]
-                vals = read_native_column(raw, "Values")
-                f = factor_to_mpa(str(raw.Unit))
-                try:
-                    bodies = read_native_column(table["Body"], "Body")
-                except Exception:
-                    bodies = [0] * len(nodes)
-                for i in range(len(nodes)):
-                    key = (int(bodies[i]), int(nodes[i]))
-                    if ci == 0:
-                        rows[key] = [None] * 6
-                    elif key not in rows:
-                        raise Exception("Different node sets across components")
-                    v = float(vals[i]) * f
-                    if Double.IsNaN(v) or Double.IsInfinity(v):
-                        raise Exception("Non-finite stress at node {0}".format(key))
-                    rows[key][ci] = v
-            keys = sorted(rows)
-            if scope is None:
-                scope = keys
-            elif keys != scope:
-                raise Exception("Node set differs between load steps")
-            peak = max(max(abs(v) for v in rows[q]) for q in keys)
-            if peak <= 0.0:
-                raise Exception("All stresses are zero at {0} s: is the unit load active in this step?".format(t))
-            name = "STEP_{0:02d}_time_{1:g}.csv".format(k + 1, t)
-            fmt = "{0:." + str(DIGITS) + "g}"
-            lines = ["body_id,node_id,SX_MPa,SY_MPa,SZ_MPa,SXY_MPa,SYZ_MPa,SXZ_MPa"]
-            for q in keys:
-                lines.append("{0},{1},{2}".format(q[0], q[1], ",".join(fmt.format(v) for v in rows[q])))
-            write_text(Path.Combine(folder, name), "\n".join(lines) + "\n")
-            info.append("step_{0:02d} = {1}; rows {2}; max |stress| {3:.4g} MPa".format(k + 1, name, len(keys), peak))
-            out("step {0}: {1} rows, max |stress| {2:.4g} MPa".format(k + 1, len(keys), peak))
-    finally:
-        if not KEEP_CHECK_RESULTS:
-            for r in results:
-                try:
-                    r.Delete()
-                except Exception:
-                    pass
-    info.append("complete = true")
-    write_text(Path.Combine(folder, "export_info.txt"), "\n".join(info) + "\n")
-    out("EXPORT COMPLETE: " + folder)
+    out("03 second submodel check   analysis: {0}   {1}".format(analysis.Name, now_tag()))
+    cs, frame = get_frame(model, COORDINATE_SYSTEM_NAME)
+    check_settings(analysis, False, EXPECTED_STEPS)
+    submodel_tree_check(analysis)
+    pts = mesh_nodes_local(analysis, frame)
+    resolve_weld_z(pts, fat_z_range(analysis, frame, FAT_SELECTION, absolute=True))
+    rows, pts = plane_check(analysis, cs, frame, PLANE_OFFSETS_MM, TIMES_S, R_OUT_MM, R_IN_MM, now_tag(), pts)
+    zlo, zhi = pts[0][1][2] - WELD_Z_MM, pts[-1][1][2] - WELD_Z_MM
+    out("")
+    out("== Cut distance ==")
+    out("model extent relative to the weld: {0:+.2f} ... {1:+.2f} mm".format(zlo, zhi))
+    fr = fat_z_range(analysis, frame, FAT_SELECTION)
+    if fr is not None:
+        out("FAT faces (toe fillets) extend over {0:+.2f} ... {1:+.2f} mm".format(fr[0], fr[1]))
+        left, right = fr[0] - zlo, zhi - fr[1]
+        check(left >= RECOMMENDED_FREE_LENGTH_MM, "free length fillet -> left cut face  = {0:.1f} mm (>= {1:g})".format(left, RECOMMENDED_FREE_LENGTH_MM))
+        check(right >= RECOMMENDED_FREE_LENGTH_MM, "free length fillet -> right cut face = {0:.1f} mm (>= {1:g})".format(right, RECOMMENDED_FREE_LENGTH_MM))
+    else:
+        out("named selection '{0}' not found; free length not computed".format(FAT_SELECTION))
+    if rows:
+        save_planes(Path.Combine(folder, "L2_fillet_planes.csv"), "L2 submodel " + analysis.Name, rows)
+        compare_planes(rows, Path.Combine(folder, "L1_sub500_planes.csv"), "first submodel (script 02)")
+        offs = sorted(set(float(r.split(",")[0]) for r in rows))
+        out("Decisive planes (nearest to the cut faces): {0:+g} mm and {1:+g} mm".format(offs[0], offs[-1]))
+    else:
+        out("No plane between the toe and the cut faces: the cut is too close to the weld (extend it).")
+    save_log(folder, "03_submodel_fillet")
 
 
 with quiet():
